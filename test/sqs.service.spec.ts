@@ -291,6 +291,18 @@ describe('SqsService — producer API', () => {
     expect(sent[1].body).toBe('already-a-string');
   });
 
+  it('uses a custom serializer when provided', async () => {
+    const serializer = vi.fn((body: unknown) => `custom:${JSON.stringify(body)}`);
+    const service = buildService({ producers: [{ name: 'p', queueUrl: 'url' } as never], serializer }, discover);
+    await service.onModuleInit();
+
+    await service.send('p', { id: '1', body: { a: 1 } });
+
+    const sent = (producerInstances[0].send as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(serializer).toHaveBeenCalledWith({ a: 1 });
+    expect(sent[0].body).toBe('custom:{"a":1}');
+  });
+
   it('throws when sending to an unknown producer', async () => {
     const service = buildService({ producers: [] }, discover);
     await service.onModuleInit();

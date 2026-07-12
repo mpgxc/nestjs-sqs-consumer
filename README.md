@@ -92,18 +92,18 @@ import { Message } from "@aws-sdk/client-sqs";
 
 @Injectable()
 export class AppMessageHandler {
-  @SqsMessageHandler(/** name: */ "myConsumer1", /** batch: */ false)
+  @SqsMessageHandler({ name: "myConsumer1", batch: false })
   public async handleMessage(message: Message) {}
 
-  @SqsConsumerEventHandler(
-    /** name: */ "myConsumer1",
-    /** eventName: */ "processing_error",
-  )
+  @SqsConsumerEventHandler({ name: "myConsumer1", eventName: "processing_error" })
   public onProcessingError(error: Error, message: Message) {
     // report errors here
   }
 }
 ```
+
+> The legacy positional forms — `@SqsMessageHandler("myConsumer1", false)` and
+> `@SqsConsumerEventHandler("myConsumer1", "processing_error")` — still work.
 
 #### Catch-all event handler
 
