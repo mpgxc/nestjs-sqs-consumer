@@ -8,6 +8,7 @@ import type { StopOptions } from 'sqs-consumer';
 import { Consumer } from 'sqs-consumer';
 import { Producer } from 'sqs-producer';
 import { ALL_CONSUMERS, SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD, SQS_OPTIONS } from './sqs.constants';
+import type { SqsQueue } from './sqs.contract';
 import type {
   Message,
   QueueName,
@@ -203,7 +204,13 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
     return producer.queueSize();
   }
 
-  public send<T = any>(name: QueueName, payload: Message<T> | Message<T>[]) {
+  public send<T>(queue: SqsQueue<string, T>, message: Message<T> | Message<T>[]): ReturnType<Producer['send']>;
+  public send<T = any>(name: QueueName, payload: Message<T> | Message<T>[]): ReturnType<Producer['send']>;
+  public send<T = any>(
+    target: QueueName | SqsQueue<string, T>,
+    payload: Message<T> | Message<T>[],
+  ): ReturnType<Producer['send']> {
+    const name = typeof target === 'string' ? target : target.name;
     const producer = this.producers.get(name);
     if (!producer) {
       throw new Error(`Producer does not exist: ${name}. Registered producers: ${this.knownNames(this.producers)}`);

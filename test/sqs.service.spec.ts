@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ALL_CONSUMERS, SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD } from '../lib/sqs.constants';
+import { defineQueue } from '../lib/sqs.contract';
 import type { Message, SqsOptions } from '../lib/sqs.types';
 
 // --- Mock the underlying bbc libraries so no network/broker is involved. ---
@@ -385,6 +386,17 @@ describe('SqsService — producer API', () => {
     const sent = (producerInstances[0].send as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(serializer).toHaveBeenCalledWith({ a: 1 });
     expect(sent[0].body).toBe('custom:{"a":1}');
+  });
+
+  it('resolves the producer name from a typed queue contract', async () => {
+    const orders = defineQueue({ name: 'orders', schema: { parse: (input: unknown) => input } });
+    const service = buildService({ producers: [orders.producer({ queueUrl: 'url' } as never)] }, discover);
+    await service.onModuleInit();
+
+    await service.send(orders, { id: '1', body: { a: 1 } });
+
+    const sent = (producerInstances[0].send as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(sent[0].body).toBe(JSON.stringify({ a: 1 }));
   });
 
   it('throws when sending to an unknown producer', async () => {
