@@ -1,14 +1,8 @@
-import { SQSClient } from '@aws-sdk/client-sqs';
 import type { Message } from '@aws-sdk/client-sqs';
+import { SQSClient } from '@aws-sdk/client-sqs';
 import { Injectable } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { vi } from 'vitest';
-import { beforeAll } from 'vitest';
-import { describe } from 'vitest';
-import { expect } from 'vitest';
-import { afterAll } from 'vitest';
-import { it } from 'vitest';
-import { afterEach } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SqsModule, SqsService } from '../lib';
 import { SqsConsumerEventHandler, SqsMessageHandler } from '../lib/sqs.decorators';
 import type { SqsConsumerOptions, SqsProducerOptions } from '../lib/sqs.types';
