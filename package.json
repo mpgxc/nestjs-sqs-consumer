@@ -1,5 +1,5 @@
 {
-  "name": "@ssut/nestjs-sqs",
+  "name": "@mpgxc/nestjs-sqs-consumer",
   "version": "4.0.0-alpha.5",
   "description": "Decorator-based Amazon SQS consumer/producer module for NestJS, built on the AWS SDK v3.",
   "main": "./dist/index.js",
@@ -19,6 +19,10 @@
     "LICENSE"
   ],
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=22.0.0"
   },
@@ -35,11 +39,12 @@
     "prepublishOnly": "pnpm run build"
   },
   "bugs": {
-    "url": "https://github.com/ssut/nestjs-sqs/issues"
+    "url": "https://github.com/mpgxc/nestjs-sqs-consumer/issues"
   },
+  "homepage": "https://github.com/mpgxc/nestjs-sqs-consumer#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ssut/nestjs-sqs.git"
+    "url": "git+https://github.com/mpgxc/nestjs-sqs-consumer.git"
   },
   "keywords": [
     "nestjs",
@@ -54,7 +59,10 @@
     "sqs-consumer",
     "sqs-producer"
   ],
-  "author": "Suhun Han <ssut@ssut.me>",
+  "author": "mpgxc <mpgx5.c@gmail.com>",
+  "contributors": [
+    "Suhun Han <ssut@ssut.me> (original @ssut/nestjs-sqs author)"
+  ],
   "license": "MIT",
   "dependencies": {
     "@golevelup/nestjs-discovery": "^7.0.3",
