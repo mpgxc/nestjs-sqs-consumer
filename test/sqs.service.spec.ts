@@ -102,6 +102,34 @@ describe('SqsService — consumer/producer wiring', () => {
     expect(consumerInstances[0].start).toHaveBeenCalledOnce();
   });
 
+  it('defaults alwaysAcknowledge to true so void handlers ack on success (#99)', async () => {
+    const discover = makeDiscover(
+      [{ meta: { name: 'queue-a' }, discoveredMethod: { handler: vi.fn(), parentClass: { instance: {} } } }],
+      [],
+    );
+
+    const service = buildService({ consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never] }, discover);
+    await service.onModuleInit();
+
+    expect(consumerInstances[0].options.alwaysAcknowledge).toBe(true);
+  });
+
+  it('lets a consumer opt out of auto-ack with alwaysAcknowledge: false (#103)', async () => {
+    const discover = makeDiscover(
+      [{ meta: { name: 'queue-a' }, discoveredMethod: { handler: vi.fn(), parentClass: { instance: {} } } }],
+      [],
+    );
+
+    const service = buildService(
+      { consumers: [{ name: 'queue-a', queueUrl: 'url-a', alwaysAcknowledge: false } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    // The user-provided value must win over the library default.
+    expect(consumerInstances[0].options.alwaysAcknowledge).toBe(false);
+  });
+
   it('wires handleMessageBatch when the handler is declared as batch', async () => {
     const handler = vi.fn();
     const discover = makeDiscover(

@@ -52,6 +52,11 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
 
       const isBatchHandler = metadata.meta.batch === true;
       const consumer = Consumer.create({
+        // Default to acknowledging a message once its handler resolves without
+        // throwing, preserving the pre-v4 nestjs-sqs behavior. Since sqs-consumer
+        // v15 no longer acknowledges on an `undefined` return, an opt-out is a
+        // per-consumer `alwaysAcknowledge: false` (return the message to ack).
+        alwaysAcknowledge: true,
         ...consumerOptions,
         ...(isBatchHandler
           ? {
