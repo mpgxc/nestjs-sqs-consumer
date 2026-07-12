@@ -7,7 +7,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { StopOptions } from 'sqs-consumer';
 import { Consumer } from 'sqs-consumer';
 import { Producer } from 'sqs-producer';
-import { SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD, SQS_OPTIONS } from './sqs.constants';
+import { ALL_CONSUMERS, SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD, SQS_OPTIONS } from './sqs.constants';
 import type {
   Message,
   QueueName,
@@ -63,7 +63,9 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
         ...(isBatchHandler ? { handleMessageBatch: handler } : { handleMessage: handler }),
       });
 
-      const eventsMetadata = eventHandlers.filter(({ meta }) => meta.name === name);
+      // A handler registered for this queue's name, plus any catch-all handler
+      // registered with the ALL_CONSUMERS wildcard, are attached here. (#89)
+      const eventsMetadata = eventHandlers.filter(({ meta }) => meta.name === name || meta.name === ALL_CONSUMERS);
       for (const eventMetadata of eventsMetadata) {
         // sqs-consumer v15 types events strictly (`on<E extends keyof Events>`),
         // but handlers are discovered with runtime-only event names — attach via

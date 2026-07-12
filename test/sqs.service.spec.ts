@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD } from '../lib/sqs.constants';
+import { ALL_CONSUMERS, SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD } from '../lib/sqs.constants';
 import type { Message, SqsOptions } from '../lib/sqs.types';
 
 // --- Mock the underlying bbc libraries so no network/broker is involved. ---
@@ -219,6 +219,33 @@ describe('SqsService — consumer/producer wiring', () => {
     // The event handler must run with `this` bound to the provider that declares
     // it, not to the message-handler's provider (regression guard for B1).
     expect(boundThis).toBe(eventInstance);
+  });
+
+  it('attaches an ALL_CONSUMERS event handler to every consumer (#89)', async () => {
+    const seen: string[] = [];
+    const globalHandler = (payload: unknown) => seen.push(payload as string);
+
+    const discover = makeDiscover(
+      [discovered({ name: 'queue-a' }, vi.fn()), discovered({ name: 'queue-b' }, vi.fn())],
+      [discovered({ name: ALL_CONSUMERS, eventName: 'processing_error' }, globalHandler)],
+    );
+
+    const service = buildService(
+      {
+        consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never, { name: 'queue-b', queueUrl: 'url-b' } as never],
+      },
+      discover,
+    );
+    await service.onModuleInit();
+
+    // The catch-all handler must be wired on both consumers.
+    expect(consumerInstances).toHaveLength(2);
+    for (const consumer of consumerInstances) {
+      const registered = consumer.listeners.find((l) => l.event === 'processing_error');
+      expect(registered).toBeDefined();
+      registered?.handler(`from-${consumer.queueUrl}`);
+    }
+    expect(seen).toEqual(['from-url-a', 'from-url-b']);
   });
 
   it('stops each consumer with its resolved stop options on destroy', async () => {

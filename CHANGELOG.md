@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.0.0-alpha.4 — Redesign, part 1 (unreleased)
+
+Phase 3: architectural improvements enabled by the v4 breaking-change window.
+
+### #108 — late-bound handlers, start on bootstrap
+
+Handlers are no longer `.bind()`-snapshotted during `onModuleInit`. They are
+resolved on their provider instance **at call time**, and consumers now start
+polling in `onApplicationBootstrap` (after every module finished initializing).
+This makes post-boot method wrapping — tracing, metrics, `@Transactional`,
+correlation-id logging (#75) — actually take effect on SQS handlers.
+
+### #89 — catch-all event handler
+
+A new exported `ALL_CONSUMERS` wildcard lets a single event handler cover every
+consumer:
+
+```ts
+import { ALL_CONSUMERS, SqsConsumerEventHandler } from '@ssut/nestjs-sqs';
+
+@SqsConsumerEventHandler(ALL_CONSUMERS, 'processing_error')
+onAnyProcessingError(error: Error, message: Message, meta: QueueMetadata) {
+  // fires for failures on any queue; `meta` identifies the source
+}
+```
+
 ## 4.0.0-alpha.3 — Tooling upgrades (unreleased)
 
 Phase 2 (part 2): bump the dev tooling to current majors.
