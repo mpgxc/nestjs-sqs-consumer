@@ -31,7 +31,7 @@ export interface SqsModuleOptionsFactory {
   createOptions(): Promise<SqsOptions> | SqsOptions;
 }
 
-export interface SqsModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
+export interface SqsModuleAsyncOptions extends Pick<ModuleMetadata, 'imports' | 'providers'> {
   useExisting?: Type<SqsModuleOptionsFactory>;
   useClass?: Type<SqsModuleOptionsFactory>;
   useFactory?: (...args: any[]) => Promise<SqsOptions> | SqsOptions;
