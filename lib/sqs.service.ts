@@ -24,11 +24,15 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
 
   private logger!: LoggerService;
   private globalStopOptions!: StopOptions;
+  private readonly serialize: (body: unknown) => string;
 
   public constructor(
     @Inject(SQS_OPTIONS) public readonly options: SqsOptions,
     @Inject(DiscoveryService) private readonly discover: DiscoveryService,
-  ) {}
+  ) {
+    this.serialize =
+      this.options.serializer ?? ((body: unknown) => (typeof body === 'string' ? body : JSON.stringify(body)));
+  }
 
   public async onModuleInit(): Promise<void> {
     this.logger = this.options.logger ?? new Logger('SqsService', { timestamp: false });
@@ -177,17 +181,10 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
     }
 
     const originalMessages = Array.isArray(payload) ? payload : [payload];
-    const messages = originalMessages.map((message) => {
-      let body = message.body;
-      if (typeof body !== 'string') {
-        body = JSON.stringify(body) as any;
-      }
-
-      return {
-        ...message,
-        body,
-      };
-    });
+    const messages = originalMessages.map((message) => ({
+      ...message,
+      body: this.serialize(message.body),
+    }));
 
     return producer.send(messages as any[]);
   }

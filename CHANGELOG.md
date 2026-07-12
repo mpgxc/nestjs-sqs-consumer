@@ -26,6 +26,15 @@ onAnyProcessingError(error: Error, message: Message, meta: QueueMetadata) {
 }
 ```
 
+### Ergonomics
+
+- **Options-object decorators**: `@SqsMessageHandler({ name, batch })` and
+  `@SqsConsumerEventHandler({ name, eventName })` are now supported alongside the
+  legacy positional forms (both still work).
+- **Pluggable serializer**: `SqsOptions.serializer` controls how a non-string
+  message body is encoded before sending. Default is unchanged — strings pass
+  through, everything else is `JSON.stringify`-ed.
+
 ## 4.0.0-alpha.3 — Tooling upgrades (unreleased)
 
 Phase 2 (part 2): bump the dev tooling to current majors.

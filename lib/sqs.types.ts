@@ -25,6 +25,12 @@ export interface SqsOptions {
   producers?: SqsProducerOptions[];
   logger?: LoggerService;
   globalStopOptions?: StopOptions;
+  /**
+   * Controls how a non-string message body is encoded before being sent.
+   * Defaults to: strings pass through untouched, everything else is
+   * `JSON.stringify`-ed.
+   */
+  serializer?: (body: unknown) => string;
 }
 
 export interface SqsModuleOptionsFactory {
