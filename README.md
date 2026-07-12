@@ -1,7 +1,7 @@
 # nestjs-sqs
 
-[![Test](https://github.com/ssut/nestjs-sqs/workflows/Test/badge.svg)](https://github.com/ssut/nestjs-sqs/actions?query=workflow%3ATest)
-[![npm version](https://badge.fury.io/js/%40ssut%2Fnestjs-sqs.svg)](https://badge.fury.io/js/%40ssut%2Fnestjs-sqs)
+[![Test](https://github.com/mpgxc/nestjs-sqs-consumer/workflows/Test/badge.svg)](https://github.com/mpgxc/nestjs-sqs-consumer/actions?query=workflow%3ATest)
+[![npm version](https://badge.fury.io/js/%40mpgxc%2Fnestjs-sqs-consumer.svg)](https://www.npmjs.com/package/@mpgxc/nestjs-sqs-consumer)
 
 Tested with: [AWS SQS](https://aws.amazon.com/en/sqs/) and [ElasticMQ](https://github.com/softwaremill/elasticmq).
 
@@ -44,14 +44,14 @@ v3) and adds a NestJS-native registration, discovery, and lifecycle layer on top
 ## Installation
 
 ```shell
-npm i --save @ssut/nestjs-sqs @aws-sdk/client-sqs
+npm i --save @mpgxc/nestjs-sqs-consumer @aws-sdk/client-sqs
 ```
 
 ## Quick start
 
 ```ts
 import { Module } from "@nestjs/common";
-import { SqsModule } from "@ssut/nestjs-sqs";
+import { SqsModule } from "@mpgxc/nestjs-sqs-consumer";
 
 @Module({
   imports: [
@@ -71,7 +71,7 @@ export class AppModule {}
 ```ts
 import { Injectable } from "@nestjs/common";
 import { Message } from "@aws-sdk/client-sqs";
-import { SqsMessageHandler, SqsService } from "@ssut/nestjs-sqs";
+import { SqsMessageHandler, SqsService } from "@mpgxc/nestjs-sqs-consumer";
 
 @Injectable()
 export class OrdersConsumer {
@@ -180,7 +180,7 @@ Use the exported `ALL_CONSUMERS` wildcard as the name to handle an event for
 **every** consumer with a single method — handy for centralized error reporting:
 
 ```ts
-import { ALL_CONSUMERS, SqsConsumerEventHandler } from "@ssut/nestjs-sqs";
+import { ALL_CONSUMERS, SqsConsumerEventHandler } from "@mpgxc/nestjs-sqs-consumer";
 
 @SqsConsumerEventHandler(ALL_CONSUMERS, "processing_error")
 public onAnyProcessingError(error: Error, message: Message) {
@@ -305,7 +305,7 @@ deserializer, the handler's payload type, and the producer's body type — no
 repeated names, no hand-written `z.infer`:
 
 ```ts
-import { defineQueue, Payload } from "@ssut/nestjs-sqs";
+import { defineQueue, Payload } from "@mpgxc/nestjs-sqs-consumer";
 
 const OrdersQueue = defineQueue({ name: "orders", schema: OrderSchema });
 
