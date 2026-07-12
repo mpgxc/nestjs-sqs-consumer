@@ -9,7 +9,7 @@ type FakeConsumer = {
   listeners: Array<{ event: string; handler: (...args: unknown[]) => unknown }>;
   start: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
-  addListener: (event: string, handler: (...args: unknown[]) => unknown) => void;
+  on: (event: string, handler: (...args: unknown[]) => unknown) => void;
   sqs: unknown;
   queueUrl: unknown;
 };
@@ -25,7 +25,7 @@ vi.mock('sqs-consumer', () => ({
         listeners: [],
         start: vi.fn(),
         stop: vi.fn(),
-        addListener(event, handler) {
+        on(event, handler) {
           this.listeners.push({ event, handler });
         },
         sqs: options.sqs,
@@ -102,6 +102,34 @@ describe('SqsService — consumer/producer wiring', () => {
     expect(consumerInstances[0].start).toHaveBeenCalledOnce();
   });
 
+  it('defaults alwaysAcknowledge to true so void handlers ack on success (#99)', async () => {
+    const discover = makeDiscover(
+      [{ meta: { name: 'queue-a' }, discoveredMethod: { handler: vi.fn(), parentClass: { instance: {} } } }],
+      [],
+    );
+
+    const service = buildService({ consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never] }, discover);
+    await service.onModuleInit();
+
+    expect(consumerInstances[0].options.alwaysAcknowledge).toBe(true);
+  });
+
+  it('lets a consumer opt out of auto-ack with alwaysAcknowledge: false (#103)', async () => {
+    const discover = makeDiscover(
+      [{ meta: { name: 'queue-a' }, discoveredMethod: { handler: vi.fn(), parentClass: { instance: {} } } }],
+      [],
+    );
+
+    const service = buildService(
+      { consumers: [{ name: 'queue-a', queueUrl: 'url-a', alwaysAcknowledge: false } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    // The user-provided value must win over the library default.
+    expect(consumerInstances[0].options.alwaysAcknowledge).toBe(false);
+  });
+
   it('wires handleMessageBatch when the handler is declared as batch', async () => {
     const handler = vi.fn();
     const discover = makeDiscover(
@@ -146,10 +174,9 @@ describe('SqsService — consumer/producer wiring', () => {
     expect(warn).toHaveBeenCalledWith('No metadata found for: orphan');
   });
 
-  // KNOWN BUG (B1): the event handler is currently bound to the *message*
-  // handler's provider instance instead of its own. `it.fails` documents this
-  // as an executable spec; remove `.fails` when B1 is fixed in Fase 1.
-  it.fails('binds the event handler to the class that declares it', async () => {
+  // Regression guard for B1: the event handler must be bound to the provider
+  // that declares it, not to the message handler's provider.
+  it('binds the event handler to the class that declares it', async () => {
     const messageInstance = { kind: 'message-owner' };
     const eventInstance = { kind: 'event-owner' };
     let boundThis: unknown;
@@ -181,7 +208,7 @@ describe('SqsService — consumer/producer wiring', () => {
     registered?.handler();
 
     // The event handler must run with `this` bound to the provider that declares
-    // it, not to the message-handler's provider (regression guard for #108/B1).
+    // it, not to the message-handler's provider (regression guard for B1).
     expect(boundThis).toBe(eventInstance);
   });
 

@@ -1,10 +1,11 @@
-import { GetQueueAttributesCommand, PurgeQueueCommand } from '@aws-sdk/client-sqs';
+import type { EventEmitter } from 'node:events';
 import type { QueueAttributeName, SQSClient } from '@aws-sdk/client-sqs';
+import { GetQueueAttributesCommand, PurgeQueueCommand } from '@aws-sdk/client-sqs';
 import { DiscoveryService } from '@golevelup/nestjs-discovery';
-import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { LoggerService, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Consumer } from 'sqs-consumer';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { StopOptions } from 'sqs-consumer';
+import { Consumer } from 'sqs-consumer';
 import { Producer } from 'sqs-producer';
 import { SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD, SQS_OPTIONS } from './sqs.constants';
 import type {
@@ -52,6 +53,11 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
 
       const isBatchHandler = metadata.meta.batch === true;
       const consumer = Consumer.create({
+        // Default to acknowledging a message once its handler resolves without
+        // throwing, preserving the pre-v4 nestjs-sqs behavior. Since sqs-consumer
+        // v15 no longer acknowledges on an `undefined` return, an opt-out is a
+        // per-consumer `alwaysAcknowledge: false` (return the message to ack).
+        alwaysAcknowledge: true,
         ...consumerOptions,
         ...(isBatchHandler
           ? {
@@ -64,12 +70,13 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
 
       const eventsMetadata = eventHandlers.filter(({ meta }) => meta.name === name);
       for (const eventMetadata of eventsMetadata) {
-        if (eventMetadata) {
-          consumer.addListener(
-            eventMetadata.meta.eventName,
-            eventMetadata.discoveredMethod.handler.bind(metadata.discoveredMethod.parentClass.instance),
-          );
-        }
+        // sqs-consumer v15 types events strictly (`on<E extends keyof Events>`),
+        // but handlers are discovered with runtime-only event names — attach via
+        // the underlying Node EventEmitter that Consumer extends.
+        (consumer as EventEmitter).on(
+          eventMetadata.meta.eventName,
+          eventMetadata.discoveredMethod.handler.bind(eventMetadata.discoveredMethod.parentClass.instance),
+        );
       }
       this.consumers.set(name, { instance: consumer, stopOptions: stopOptions ?? this.globalStopOptions });
     });
@@ -133,15 +140,17 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
   }
 
   public getProducerQueueSize(name: QueueName) {
-    if (!this.producers.has(name)) {
+    const producer = this.producers.get(name);
+    if (!producer) {
       throw new Error(`Producer does not exist: ${name}`);
     }
 
-    return this.producers.get(name)!.queueSize();
+    return producer.queueSize();
   }
 
   public send<T = any>(name: QueueName, payload: Message<T> | Message<T>[]) {
-    if (!this.producers.has(name)) {
+    const producer = this.producers.get(name);
+    if (!producer) {
       throw new Error(`Producer does not exist: ${name}`);
     }
 
@@ -158,7 +167,6 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
       };
     });
 
-    const producer = this.producers.get(name)!;
     return producer.send(messages as any[]);
   }
 }
