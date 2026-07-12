@@ -1,6 +1,6 @@
 {
   "name": "@ssut/nestjs-sqs",
-  "version": "4.0.0-alpha.0",
+  "version": "4.0.0-alpha.1",
   "description": "Decorator-based Amazon SQS consumer/producer module for NestJS, built on the AWS SDK v3.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

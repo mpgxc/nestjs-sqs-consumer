@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.0.0-alpha.1 — Bug fixes (unreleased)
+
+Phase 1 of the v4 evolution: low-risk correctness fixes, each covered by a test.
+
+### Fixed
+
+- **B1** — event handlers are now bound to the provider instance that declares
+  them, instead of the message handler's provider. Previously, an
+  `@SqsConsumerEventHandler` living in a different class than its
+  `@SqsMessageHandler` would run with the wrong `this`.
+- **B3** — `SqsModule.register()` now forwards the DI-injected `SQS_OPTIONS`
+  into `SqsService` instead of capturing the options from a closure, so the
+  options provider is actually meaningful (removes the stray `biome-ignore`).
+- **#80** — `SqsModuleAsyncOptions` now accepts `providers`, which are added to
+  the module and made available to the `useFactory`/`useClass` provider. No more
+  wrapper modules just to inject a `Logger` into the async factory.
+- **B4** — replaced the non-null assertions in `getProducerQueueSize`/`send`
+  with an explicit get-and-guard, removing the `noNonNullAssertion` warnings.
+
+### Tests
+
+- New `test/sqs.module.spec.ts` covers register/registerAsync DI (B3, #80).
+- Flipped the B1 `it.fails` spec to a passing regression guard.
+
 ## 4.0.0-alpha.0 — Foundation (unreleased)
 
 This is the first step of the v4 "releitura": it modernizes the tooling and

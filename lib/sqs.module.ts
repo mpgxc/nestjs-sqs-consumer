@@ -19,8 +19,8 @@ export class SqsModule {
     };
     const sqsProvider: Provider = {
       provide: SqsService,
-      // biome-ignore lint/correctness/noUnusedVariables: <ignore>
-      useFactory: (sqsOptions: SqsOptions, discover: DiscoveryService) => new SqsService(options, discover),
+      useFactory: (resolvedOptions: SqsOptions, discover: DiscoveryService) =>
+        new SqsService(resolvedOptions, discover),
       inject: [SQS_OPTIONS, DiscoveryService],
     };
 
@@ -45,7 +45,7 @@ export class SqsModule {
       global: true,
       module: SqsModule,
       imports: [DiscoveryModule, ...(options.imports ?? [])],
-      providers: [...asyncProviders, sqsProvider],
+      providers: [...asyncProviders, ...(options.providers ?? []), sqsProvider],
       exports: [sqsProvider],
     };
   }

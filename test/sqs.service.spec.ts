@@ -146,10 +146,9 @@ describe('SqsService — consumer/producer wiring', () => {
     expect(warn).toHaveBeenCalledWith('No metadata found for: orphan');
   });
 
-  // KNOWN BUG (B1): the event handler is currently bound to the *message*
-  // handler's provider instance instead of its own. `it.fails` documents this
-  // as an executable spec; remove `.fails` when B1 is fixed in Fase 1.
-  it.fails('binds the event handler to the class that declares it', async () => {
+  // Regression guard for B1: the event handler must be bound to the provider
+  // that declares it, not to the message handler's provider.
+  it('binds the event handler to the class that declares it', async () => {
     const messageInstance = { kind: 'message-owner' };
     const eventInstance = { kind: 'event-owner' };
     let boundThis: unknown;
@@ -181,7 +180,7 @@ describe('SqsService — consumer/producer wiring', () => {
     registered?.handler();
 
     // The event handler must run with `this` bound to the provider that declares
-    // it, not to the message-handler's provider (regression guard for #108/B1).
+    // it, not to the message-handler's provider (regression guard for B1).
     expect(boundThis).toBe(eventInstance);
   });
 
