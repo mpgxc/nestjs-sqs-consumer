@@ -10,6 +10,12 @@ This module provides decorator-based message handling suited for simple use.
 
 This library internally uses [bbc/sqs-producer](https://github.com/bbc/sqs-producer) and [bbc/sqs-consumer](https://github.com/bbc/sqs-consumer), and implements some more useful features on top of the basic functionality given by them.
 
+## Requirements
+
+- **Node.js >= 22** (the underlying `sqs-consumer` v15 / `sqs-producer` v9 track active LTS only).
+- **NestJS >= 6** (tested against v11).
+- **`@aws-sdk/client-sqs` >= 3.1036** as a peer dependency (AWS SDK v3).
+
 ## Installation
 
 ```shell script
@@ -139,6 +145,65 @@ export class AppService {
   }
 }
 ```
+
+### Message acknowledgement
+
+By default a message is **acknowledged (deleted) once its handler resolves
+without throwing** — a `void`/`async` handler that finishes successfully marks
+the message as processed. Throwing (or rejecting) leaves the message on the
+queue for redelivery.
+
+This is implemented by defaulting `alwaysAcknowledge: true` on every consumer.
+If you want to control acknowledgement yourself — the native `sqs-consumer`
+contract, where returning `undefined` does **not** delete the message — opt out
+per consumer and return the message (or an object with its `MessageId`) to ack:
+
+```ts
+SqsModule.register({
+  consumers: [
+    {
+      name: "myConsumer1",
+      queueUrl: "...",
+      alwaysAcknowledge: false, // handler must return the message to ack it
+    },
+  ],
+});
+```
+
+### Batch handling
+
+Set `batch: true` on the handler to receive an array of messages
+(`handleMessageBatch`) instead of one at a time. Tune throughput with
+`sqs-consumer`'s `batchSize` (1–10) on the consumer:
+
+```ts
+// registration
+consumers: [{ name: "myConsumer1", queueUrl: "...", batchSize: 10 }];
+
+// handler
+@SqsMessageHandler({ name: "myConsumer1", batch: true })
+public async handleBatch(messages: Message[]) {}
+```
+
+### Custom serializer
+
+Message bodies are encoded before being sent — strings pass through untouched,
+everything else is `JSON.stringify`-ed. Override this globally with
+`serializer`:
+
+```ts
+SqsModule.register({
+  serializer: (body) => myEncode(body),
+  producers: [...],
+});
+```
+
+### Concurrency
+
+Throughput per consumer is governed by `sqs-consumer` options — `batchSize`
+(messages per poll) and `pollingWaitTimeMs`. To process a single queue with more
+parallelism, register **multiple consumers** (distinct `name`s) pointing at the
+same `queueUrl`; each runs its own polling loop.
 
 ### Configuration
 
