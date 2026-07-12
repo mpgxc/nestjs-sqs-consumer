@@ -18,7 +18,7 @@
     "outDir": "./dist",
     "rootDir": "./",
     "baseUrl": "./",
-    "types": ["vitest/globals"],
+    "types": ["vitest/globals", "node"],
     "noEmit": true
   },
   "include": ["lib", "e2e", "test"],

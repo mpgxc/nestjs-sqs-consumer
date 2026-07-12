@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.0.0-alpha.3 — Tooling upgrades (unreleased)
+
+Phase 2 (part 2): bump the dev tooling to current majors.
+
+### Changed
+
+- **Biome 1 → 2**: config migrated to the v2 schema (`files.includes` with `!`
+  negations, `assist.actions.source.organizeImports`, `linter.rules.preset`).
+- **Vitest 2 → 4** (with `@vitest/coverage-v8`), pulling **Vite 7** and
+  **`@types/node` 22**. The deprecated CJS Node API warning is gone.
+- Added `"node"` to `tsconfig` `types` so Node globals/`node:` modules resolve
+  under the restricted `types` list.
+
+### Fixed
+
+- sqs-consumer v15 types its event emitter strictly (`on<E extends keyof
+  Events>`) and no longer exposes `addListener` on `Consumer`. Event handlers,
+  whose names are only known at runtime, are now attached through the underlying
+  Node `EventEmitter` (`(consumer as EventEmitter).on(...)`).
+
 ## 4.0.0-alpha.2 — Dependency upgrades (unreleased)
 
 Phase 2 (part 1): bump the runtime queue libraries to their current majors.

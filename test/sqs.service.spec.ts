@@ -9,7 +9,7 @@ type FakeConsumer = {
   listeners: Array<{ event: string; handler: (...args: unknown[]) => unknown }>;
   start: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
-  addListener: (event: string, handler: (...args: unknown[]) => unknown) => void;
+  on: (event: string, handler: (...args: unknown[]) => unknown) => void;
   sqs: unknown;
   queueUrl: unknown;
 };
@@ -25,7 +25,7 @@ vi.mock('sqs-consumer', () => ({
         listeners: [],
         start: vi.fn(),
         stop: vi.fn(),
-        addListener(event, handler) {
+        on(event, handler) {
           this.listeners.push({ event, handler });
         },
         sqs: options.sqs,

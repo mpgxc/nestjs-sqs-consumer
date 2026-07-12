@@ -1,8 +1,7 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "files": {
-    "include": ["e2e/**/*.ts", "lib/**/*.ts", "test/**/*.ts", "*.config.ts"],
-    "ignore": ["dist/"]
+    "includes": ["**/e2e/**/*.ts", "**/lib/**/*.ts", "**/test/**/*.ts", "**/*.config.ts", "!**/dist/"]
   },
   "formatter": {
     "enabled": true,
@@ -11,9 +10,7 @@
     "formatWithErrors": false,
     "lineEnding": "lf"
   },
-  "organizeImports": {
-    "enabled": true
-  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "javascript": {
     "formatter": {
       "lineWidth": 120,
@@ -29,15 +26,14 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": false,
+      "preset": "none",
       "complexity": {
         "noBannedTypes": "error",
         "noUselessTypeConstraint": "error"
       },
       "correctness": {
         "noPrecisionLoss": "error",
-        "noUnusedVariables": "warn",
-        "useArrayLiterals": "off"
+        "noUnusedVariables": "warn"
       },
       "style": {
         "noInferrableTypes": "off",
@@ -45,7 +41,8 @@
         "noNonNullAssertion": "warn",
         "useAsConstAssertion": "error",
         "useBlockStatements": "off",
-        "useConst": "warn"
+        "useConst": "warn",
+        "useArrayLiterals": "off"
       },
       "suspicious": {
         "noAssignInExpressions": "warn",
