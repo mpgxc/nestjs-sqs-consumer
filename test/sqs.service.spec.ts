@@ -317,4 +317,58 @@ describe('SqsService — producer API', () => {
 
     expect(() => service.getProducerQueueSize('missing')).toThrow('Producer does not exist: missing');
   });
+
+  it('lists the registered producer names in the not-found error', async () => {
+    const service = buildService(
+      { producers: [{ name: 'orders', queueUrl: 'url' } as never, { name: 'emails', queueUrl: 'url' } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    expect(() => service.getProducerQueueSize('nope')).toThrow('Registered producers: orders, emails');
+  });
+});
+
+describe('SqsService — queue admin', () => {
+  const discover = makeDiscover([], []);
+
+  it('purges a queue via the resolved sqs client', async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const service = buildService(
+      { producers: [{ name: 'p', queueUrl: 'https://sqs/url', sqs: { send } } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    await service.purgeQueue('p');
+
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0][0].input).toEqual({ QueueUrl: 'https://sqs/url' });
+  });
+
+  it('reads queue attributes via the resolved sqs client', async () => {
+    const send = vi.fn().mockResolvedValue({ Attributes: { ApproximateNumberOfMessages: '5' } });
+    const service = buildService(
+      { producers: [{ name: 'p', queueUrl: 'https://sqs/url', sqs: { send } } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    const attributes = await service.getQueueAttributes('p');
+
+    expect(attributes).toEqual({ ApproximateNumberOfMessages: '5' });
+    expect(send.mock.calls[0][0].input).toEqual({ QueueUrl: 'https://sqs/url', AttributeNames: ['All'] });
+  });
+
+  it('throws with registered names when the queue is unknown', async () => {
+    const service = buildService(
+      { producers: [{ name: 'p', queueUrl: 'url', sqs: { send: vi.fn() } } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    await expect(service.purgeQueue('nope')).rejects.toThrow(
+      'Consumer/Producer does not exist: nope. Registered consumers: (none); producers: p',
+    );
+  });
 });
