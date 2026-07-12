@@ -1,4 +1,5 @@
-import { Message, SQSClient } from '@aws-sdk/client-sqs';
+import { SQSClient } from '@aws-sdk/client-sqs';
+import type { Message } from '@aws-sdk/client-sqs';
 import { Injectable } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { vi } from 'vitest';
@@ -10,7 +11,7 @@ import { it } from 'vitest';
 import { afterEach } from 'vitest';
 import { SqsModule, SqsService } from '../lib';
 import { SqsConsumerEventHandler, SqsMessageHandler } from '../lib/sqs.decorators';
-import { SqsConsumerOptions, SqsProducerOptions } from '../lib/sqs.types';
+import type { SqsConsumerOptions, SqsProducerOptions } from '../lib/sqs.types';
 
 const SQS_ENDPOINT = process.env.SQS_ENDPOINT || 'http://localhost:9324/000000000000';
 

@@ -1,36 +1,18 @@
-import AutoImport from 'unplugin-auto-import/vite';
 import { defineConfig } from 'vitest/config';
 
+// Unit tests exercise the module/service wiring in isolation, with the
+// underlying sqs-consumer/sqs-producer libraries mocked. No broker required.
 export default defineConfig({
   test: {
-    include: ['**/*.e2e-spec.ts'],
+    include: ['test/**/*.spec.ts'],
     environment: 'node',
-    globals: true,
+    globals: false,
     root: './',
-    testTimeout: 20000,
-    hookTimeout: 30000,
-    cache: false,
-    reporters: ['verbose'],
-    isolate: false,
-    maxConcurrency: 1,
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        isolate: false,
-        singleFork: true,
-        minForks: 1,
-        maxForks: 1,
-      },
+    testTimeout: 10000,
+    coverage: {
+      provider: 'v8',
+      include: ['lib/**/*.ts'],
+      exclude: ['lib/index.ts'],
     },
   },
-  plugins: [
-    // This is required to build the test files with SWC
-    // swc.vite({
-    //   // Explicitly set the module type to avoid inheriting this value from a `.swcrc` config file
-    //   module: { type: 'nodenext' },
-    // }),
-    AutoImport({
-      imports: ['vitest'],
-    }),
-  ],
 });

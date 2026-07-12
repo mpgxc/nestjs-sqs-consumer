@@ -74,6 +74,7 @@ Temporary Items
 
 dist/
 node_modules/
+coverage/
 
 *.tgz
 tsconfig.vitest-temp.json

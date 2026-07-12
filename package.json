@@ -1,15 +1,38 @@
 {
   "name": "@ssut/nestjs-sqs",
-  "version": "3.0.1",
-  "description": "",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "4.0.0-alpha.0",
+  "description": "Decorator-based Amazon SQS consumer/producer module for NestJS, built on the AWS SDK v3.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "test:e2e": "vitest",
-    "build": "rimraf -rf dist && tsc -p tsconfig.json"
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "biome ci",
+    "lint:fix": "biome check --write",
+    "format": "biome format --write",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
+    "prepublishOnly": "pnpm run build"
   },
   "bugs": {
     "url": "https://github.com/ssut/nestjs-sqs/issues"
@@ -18,7 +41,19 @@
     "type": "git",
     "url": "git+https://github.com/ssut/nestjs-sqs.git"
   },
-  "keywords": [],
+  "keywords": [
+    "nestjs",
+    "sqs",
+    "aws",
+    "aws-sdk",
+    "aws-sdk-v3",
+    "queue",
+    "consumer",
+    "producer",
+    "message-queue",
+    "sqs-consumer",
+    "sqs-producer"
+  ],
   "author": "Suhun Han <ssut@ssut.me>",
   "license": "MIT",
   "dependencies": {
@@ -31,12 +66,14 @@
     "@nestjs/common": "^11.0.6",
     "@nestjs/core": "^11.0.6",
     "@nestjs/testing": "^11.0.6",
+    "@swc/core": "^1.15.43",
     "prettier": "^3.3.2",
     "reflect-metadata": "^0.2.2",
     "rimraf": "^6.0.1",
     "rxjs": "^7.8.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsup": "^8.5.1",
     "typescript": "^5.5.3",
     "unplugin-auto-import": "^0.18.0",
     "vitest": "^2.0.2"

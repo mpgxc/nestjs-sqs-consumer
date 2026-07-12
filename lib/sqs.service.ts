@@ -1,10 +1,13 @@
-import { GetQueueAttributesCommand, PurgeQueueCommand, QueueAttributeName, SQSClient } from '@aws-sdk/client-sqs';
+import { GetQueueAttributesCommand, PurgeQueueCommand } from '@aws-sdk/client-sqs';
+import type { QueueAttributeName, SQSClient } from '@aws-sdk/client-sqs';
 import { DiscoveryService } from '@golevelup/nestjs-discovery';
-import { Inject, Injectable, Logger, LoggerService, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Consumer, StopOptions } from 'sqs-consumer';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { LoggerService, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Consumer } from 'sqs-consumer';
+import type { StopOptions } from 'sqs-consumer';
 import { Producer } from 'sqs-producer';
 import { SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD, SQS_OPTIONS } from './sqs.constants';
-import {
+import type {
   Message,
   QueueName,
   SqsConsumerEventHandlerMeta,
@@ -18,12 +21,12 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
   public readonly consumers = new Map<QueueName, SqsConsumerMapValues>();
   public readonly producers = new Map<QueueName, Producer>();
 
-  private logger: LoggerService;
-  private globalStopOptions: StopOptions;
+  private logger!: LoggerService;
+  private globalStopOptions!: StopOptions;
 
   public constructor(
     @Inject(SQS_OPTIONS) public readonly options: SqsOptions,
-    private readonly discover: DiscoveryService,
+    @Inject(DiscoveryService) private readonly discover: DiscoveryService,
   ) {}
 
   public async onModuleInit(): Promise<void> {
@@ -134,7 +137,7 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Producer does not exist: ${name}`);
     }
 
-    return this.producers.get(name).queueSize();
+    return this.producers.get(name)!.queueSize();
   }
 
   public send<T = any>(name: QueueName, payload: Message<T> | Message<T>[]) {
@@ -155,7 +158,7 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
       };
     });
 
-    const producer = this.producers.get(name);
+    const producer = this.producers.get(name)!;
     return producer.send(messages as any[]);
   }
 }
