@@ -128,9 +128,17 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
     return (...args: any[]) => (instance as Record<string, (...a: any[]) => any>)[methodName](...args);
   }
 
+  private knownNames(map: Map<QueueName, unknown>): string {
+    const names = [...map.keys()];
+    return names.length ? names.join(', ') : '(none)';
+  }
+
   private getQueueInfo(name: QueueName) {
     if (!this.consumers.has(name) && !this.producers.has(name)) {
-      throw new Error(`Consumer/Producer does not exist: ${name}`);
+      throw new Error(
+        `Consumer/Producer does not exist: ${name}. ` +
+          `Registered consumers: ${this.knownNames(this.consumers)}; producers: ${this.knownNames(this.producers)}`,
+      );
     }
 
     const { sqs, queueUrl } = (this.consumers.get(name)?.instance ?? this.producers.get(name)) as {
@@ -168,7 +176,7 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
   public getProducerQueueSize(name: QueueName) {
     const producer = this.producers.get(name);
     if (!producer) {
-      throw new Error(`Producer does not exist: ${name}`);
+      throw new Error(`Producer does not exist: ${name}. Registered producers: ${this.knownNames(this.producers)}`);
     }
 
     return producer.queueSize();
@@ -177,7 +185,7 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
   public send<T = any>(name: QueueName, payload: Message<T> | Message<T>[]) {
     const producer = this.producers.get(name);
     if (!producer) {
-      throw new Error(`Producer does not exist: ${name}`);
+      throw new Error(`Producer does not exist: ${name}. Registered producers: ${this.knownNames(this.producers)}`);
     }
 
     const originalMessages = Array.isArray(payload) ? payload : [payload];
