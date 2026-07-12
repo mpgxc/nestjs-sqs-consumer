@@ -2,7 +2,7 @@ import type { EventEmitter } from 'node:events';
 import type { QueueAttributeName, SQSClient } from '@aws-sdk/client-sqs';
 import { GetQueueAttributesCommand, PurgeQueueCommand } from '@aws-sdk/client-sqs';
 import { DiscoveryService } from '@golevelup/nestjs-discovery';
-import type { LoggerService, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import type { LoggerService, OnApplicationBootstrap, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { StopOptions } from 'sqs-consumer';
 import { Consumer } from 'sqs-consumer';
@@ -18,7 +18,7 @@ import type {
 } from './sqs.types';
 
 @Injectable()
-export class SqsService implements OnModuleInit, OnModuleDestroy {
+export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModuleDestroy {
   public readonly consumers = new Map<QueueName, SqsConsumerMapValues>();
   public readonly producers = new Map<QueueName, Producer>();
 
@@ -52,6 +52,7 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
       }
 
       const isBatchHandler = metadata.meta.batch === true;
+      const handler = this.lateBound(metadata.discoveredMethod);
       const consumer = Consumer.create({
         // Default to acknowledging a message once its handler resolves without
         // throwing, preserving the pre-v4 nestjs-sqs behavior. Since sqs-consumer
@@ -59,13 +60,7 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
         // per-consumer `alwaysAcknowledge: false` (return the message to ack).
         alwaysAcknowledge: true,
         ...consumerOptions,
-        ...(isBatchHandler
-          ? {
-              handleMessageBatch: metadata.discoveredMethod.handler.bind(
-                metadata.discoveredMethod.parentClass.instance,
-              ),
-            }
-          : { handleMessage: metadata.discoveredMethod.handler.bind(metadata.discoveredMethod.parentClass.instance) }),
+        ...(isBatchHandler ? { handleMessageBatch: handler } : { handleMessage: handler }),
       });
 
       const eventsMetadata = eventHandlers.filter(({ meta }) => meta.name === name);
@@ -73,10 +68,7 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
         // sqs-consumer v15 types events strictly (`on<E extends keyof Events>`),
         // but handlers are discovered with runtime-only event names — attach via
         // the underlying Node EventEmitter that Consumer extends.
-        (consumer as EventEmitter).on(
-          eventMetadata.meta.eventName,
-          eventMetadata.discoveredMethod.handler.bind(eventMetadata.discoveredMethod.parentClass.instance),
-        );
+        (consumer as EventEmitter).on(eventMetadata.meta.eventName, this.lateBound(eventMetadata.discoveredMethod));
       }
       this.consumers.set(name, { instance: consumer, stopOptions: stopOptions ?? this.globalStopOptions });
     });
@@ -90,7 +82,17 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
       const producer = Producer.create(producerOptions);
       this.producers.set(name, producer);
     });
+  }
 
+  /**
+   * Consumers are wired during `onModuleInit`, but polling only starts here — in
+   * `onApplicationBootstrap`, which Nest guarantees to run after every module's
+   * init hook. This is what makes lazy handler resolution meaningful: any
+   * decorator that wraps a handler method during bootstrap (tracing, metrics,
+   * `@Transactional`, etc.) is already in place before the first message is
+   * pulled, and is picked up because handlers are resolved at call time. (#108)
+   */
+  public onApplicationBootstrap(): void {
     for (const consumer of this.consumers.values()) {
       consumer.instance.start();
     }
@@ -100,6 +102,24 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
     for (const consumer of this.consumers.values()) {
       consumer.instance.stop(consumer.stopOptions);
     }
+  }
+
+  /**
+   * Wrap a discovered handler in a closure that resolves the method on its
+   * provider instance at call time, instead of binding a snapshot at init time.
+   * A method replaced later (e.g. wrapped by an interceptor/observability
+   * decorator during bootstrap) is therefore honored, and `this` stays bound to
+   * the declaring provider. (#108)
+   */
+  private lateBound(discoveredMethod: {
+    methodName: string;
+    parentClass: { instance: unknown };
+    // biome-ignore lint/suspicious/noExplicitAny: matches sqs-consumer's loose handler contract.
+  }): (...args: any[]) => any {
+    const { instance } = discoveredMethod.parentClass;
+    const { methodName } = discoveredMethod;
+    // biome-ignore lint/suspicious/noExplicitAny: dynamic method dispatch on the provider instance.
+    return (...args: any[]) => (instance as Record<string, (...a: any[]) => any>)[methodName](...args);
   }
 
   private getQueueInfo(name: QueueName) {
