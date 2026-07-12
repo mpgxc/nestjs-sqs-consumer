@@ -166,6 +166,90 @@ describe('SqsService — consumer/producer wiring', () => {
     expect(consumerInstances[0].options.handleMessage).toBeUndefined();
   });
 
+  it('passes the deserialized body to the handler when a deserializer is set', async () => {
+    let received: unknown;
+    const discover = makeDiscover(
+      [
+        discovered({ name: 'queue-a' }, (v: unknown) => {
+          received = v;
+        }),
+      ],
+      [],
+    );
+    const deserializer = (m: { Body?: string }) => JSON.parse(m.Body ?? '{}');
+
+    const service = buildService(
+      { consumers: [{ name: 'queue-a', queueUrl: 'url-a', deserializer } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    await (consumerInstances[0].options.handleMessage as (m: unknown) => unknown)({ Body: '{"id":7}' });
+    expect(received).toEqual({ id: 7 });
+  });
+
+  it('applies the deserializer per message for batch handlers', async () => {
+    let received: unknown;
+    const discover = makeDiscover(
+      [
+        discovered({ name: 'queue-a', batch: true }, (v: unknown) => {
+          received = v;
+        }),
+      ],
+      [],
+    );
+    const deserializer = (m: { Body?: string }) => JSON.parse(m.Body ?? '{}');
+
+    const service = buildService(
+      { consumers: [{ name: 'queue-a', queueUrl: 'url-a', deserializer } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    await (consumerInstances[0].options.handleMessageBatch as (m: unknown[]) => unknown)([
+      { Body: '{"i":1}' },
+      { Body: '{"i":2}' },
+    ]);
+    expect(received).toEqual([{ i: 1 }, { i: 2 }]);
+  });
+
+  it('passes the raw message to the handler when no deserializer is set', async () => {
+    let received: unknown;
+    const discover = makeDiscover(
+      [
+        discovered({ name: 'queue-a' }, (v: unknown) => {
+          received = v;
+        }),
+      ],
+      [],
+    );
+
+    const service = buildService({ consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never] }, discover);
+    await service.onModuleInit();
+
+    const raw = { Body: '{"id":7}' };
+    await (consumerInstances[0].options.handleMessage as (m: unknown) => unknown)(raw);
+    expect(received).toBe(raw);
+  });
+
+  it('propagates a throwing deserializer so the message is not acknowledged', async () => {
+    const handler = vi.fn();
+    const discover = makeDiscover([discovered({ name: 'queue-a' }, handler)], []);
+    const deserializer = () => {
+      throw new Error('invalid payload');
+    };
+
+    const service = buildService(
+      { consumers: [{ name: 'queue-a', queueUrl: 'url-a', deserializer } as never] },
+      discover,
+    );
+    await service.onModuleInit();
+
+    const run = consumerInstances[0].options.handleMessage as (m: unknown) => unknown;
+    expect(() => run({ Body: 'x' })).toThrow('invalid payload');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('throws when two consumers share the same name', async () => {
     const discover = makeDiscover([discovered({ name: 'dup' }, vi.fn())], []);
 

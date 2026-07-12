@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'node:events';
-import type { QueueAttributeName, SQSClient } from '@aws-sdk/client-sqs';
+import type { QueueAttributeName, SQSClient, Message as SqsRawMessage } from '@aws-sdk/client-sqs';
 import { GetQueueAttributesCommand, PurgeQueueCommand } from '@aws-sdk/client-sqs';
 import { DiscoveryService } from '@golevelup/nestjs-discovery';
 import type { LoggerService, OnApplicationBootstrap, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
@@ -44,7 +44,7 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
       await this.discover.providerMethodsWithMetaAtKey<SqsConsumerEventHandlerMeta>(SQS_CONSUMER_EVENT_HANDLER);
 
     this.options.consumers?.forEach((options) => {
-      const { name, stopOptions, ...consumerOptions } = options;
+      const { name, stopOptions, deserializer, ...consumerOptions } = options;
       if (this.consumers.has(name)) {
         throw new Error(`Consumer already exists: ${name}`);
       }
@@ -56,7 +56,7 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
       }
 
       const isBatchHandler = metadata.meta.batch === true;
-      const handler = this.lateBound(metadata.discoveredMethod);
+      const handler = this.withDeserializer(this.lateBound(metadata.discoveredMethod), deserializer, isBatchHandler);
       const consumer = Consumer.create({
         // Default to acknowledging a message once its handler resolves without
         // throwing, preserving the pre-v4 nestjs-sqs behavior. Since sqs-consumer
@@ -126,6 +126,27 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
     const { methodName } = discoveredMethod;
     // biome-ignore lint/suspicious/noExplicitAny: dynamic method dispatch on the provider instance.
     return (...args: any[]) => (instance as Record<string, (...a: any[]) => any>)[methodName](...args);
+  }
+
+  /**
+   * If a `deserializer` is configured for a consumer, wrap the handler so it
+   * receives the parsed value instead of the raw SQS message (applied per
+   * message for batch handlers). A throwing deserializer propagates, so the
+   * message is not acknowledged and is redelivered / dead-lettered.
+   */
+  private withDeserializer(
+    // biome-ignore lint/suspicious/noExplicitAny: matches sqs-consumer's loose handler contract.
+    invoke: (...args: any[]) => any,
+    deserializer: ((message: SqsRawMessage) => unknown) | undefined,
+    isBatch: boolean,
+    // biome-ignore lint/suspicious/noExplicitAny: matches sqs-consumer's loose handler contract.
+  ): (...args: any[]) => any {
+    if (!deserializer) {
+      return invoke;
+    }
+    return isBatch
+      ? (messages: SqsRawMessage[]) => invoke(messages.map((message) => deserializer(message)))
+      : (message: SqsRawMessage) => invoke(deserializer(message));
   }
 
   private knownNames(map: Map<QueueName, unknown>): string {

@@ -262,6 +262,41 @@ SqsModule.register({
 });
 ```
 
+### Strongly-typed messages (e.g. Zod)
+
+Set a per-consumer `deserializer` to turn the raw SQS `Message` into a validated,
+typed value **before** it reaches your handler. A single [Zod](https://zod.dev)
+schema then gives you both runtime validation and the static type:
+
+```ts
+import { z } from "zod";
+
+const OrderSchema = z.object({ id: z.string(), total: z.number() });
+type Order = z.infer<typeof OrderSchema>;
+
+// registration
+consumers: [
+  {
+    name: "orders",
+    queueUrl: "...",
+    deserializer: (message) => OrderSchema.parse(JSON.parse(message.Body ?? "{}")),
+  },
+];
+
+// handler receives the parsed, typed body — no JSON.parse boilerplate
+@SqsMessageHandler({ name: "orders" })
+public async handle(order: Order) {
+  await this.process(order);
+}
+```
+
+If the payload is invalid, `.parse` throws — the message is **not acknowledged**,
+so it is redelivered and eventually dead-lettered, and the error surfaces on the
+`processing_error` event (see [Catch-all event handler](#catch-all-event-handler)).
+For batch handlers the deserializer is applied per message, so the handler
+receives an array of parsed values. To validate on the producing side too, parse
+before sending: `sqs.send("orders", { id, body: OrderSchema.parse(order) })`.
+
 ## Operational concerns
 
 ### Concurrency
