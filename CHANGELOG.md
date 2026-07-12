@@ -1,5 +1,35 @@
 # Changelog
 
+## 4.0.0-alpha.5 — Typed messages (unreleased)
+
+### Added
+
+- **Per-consumer `deserializer`** (`SqsConsumerOptions.deserializer`): transforms
+  each raw SQS message before it reaches the handler, so the handler receives a
+  parsed, typed value instead of the raw `Message`. Pairs naturally with a schema
+  library — a single Zod schema gives both runtime validation and the static
+  type:
+
+  ```ts
+  const OrderSchema = z.object({ id: z.string(), total: z.number() });
+  consumers: [{ name: "orders", queueUrl: "...", deserializer: (m) => OrderSchema.parse(JSON.parse(m.Body ?? "{}")) }];
+
+  @SqsMessageHandler({ name: "orders" })
+  handle(order: z.infer<typeof OrderSchema>) {}
+  ```
+
+  It is opt-in (handlers without a `deserializer` still receive the raw
+  `Message`), applied per message for batch handlers, and a throwing deserializer
+  propagates — so an invalid payload is not acknowledged and is redelivered /
+  dead-lettered.
+
+- **`defineQueue` typed queue contract** for end-to-end inference. It binds a
+  `name` to a `schema` once and exposes `.consumer()` / `.producer()` builders
+  (with the deserializer/name prefilled), a `Payload<typeof Q>` helper to type
+  the handler, and a `send(queue, message)` overload that type-checks the body.
+  Schema-agnostic (any `parse(input) => T`, e.g. Zod), so no runtime dependency
+  on a validation library.
+
 ## 4.0.0-alpha.4 — Redesign, part 1 (unreleased)
 
 Phase 3: architectural improvements enabled by the v4 breaking-change window.

@@ -1,4 +1,4 @@
-import type { MessageAttributeValue } from '@aws-sdk/client-sqs';
+import type { MessageAttributeValue, Message as SqsRawMessage } from '@aws-sdk/client-sqs';
 import type { LoggerService, ModuleMetadata, Type } from '@nestjs/common';
 import type { Consumer, ConsumerOptions, StopOptions } from 'sqs-consumer';
 import type { Producer } from 'sqs-producer';
@@ -9,6 +9,15 @@ export type QueueName = string;
 export type SqsConsumerOptions = Omit<ConsumerOptions, 'handleMessage' | 'handleMessageBatch'> & {
   name: QueueName;
   stopOptions?: StopOptions;
+  /**
+   * Transforms each raw SQS message before it reaches the handler. When set, the
+   * `@SqsMessageHandler` receives the returned value instead of the raw
+   * `Message` (for batch handlers it is applied per message, so the handler
+   * receives an array of results). Throwing here — e.g. a Zod `.parse` failure —
+   * propagates as a processing error, so the message is not acknowledged and is
+   * redelivered / dead-lettered.
+   */
+  deserializer?: (message: SqsRawMessage) => unknown;
 };
 
 export type SqsConsumerMapValues = {

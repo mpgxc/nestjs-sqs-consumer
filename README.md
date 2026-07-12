@@ -25,6 +25,7 @@ v3) and adds a NestJS-native registration, discovery, and lifecycle layer on top
 - [Producing messages](#producing-messages)
   - [FIFO queues](#fifo-queues)
   - [Custom serializer](#custom-serializer)
+  - [Strongly-typed messages (Zod)](#strongly-typed-messages-eg-zod)
 - [Operational concerns](#operational-concerns)
   - [Concurrency](#concurrency)
   - [Dead-letter queues](#dead-letter-queues)
@@ -261,6 +262,71 @@ SqsModule.register({
   producers: [...],
 });
 ```
+
+### Strongly-typed messages (e.g. Zod)
+
+Set a per-consumer `deserializer` to turn the raw SQS `Message` into a validated,
+typed value **before** it reaches your handler. A single [Zod](https://zod.dev)
+schema then gives you both runtime validation and the static type:
+
+```ts
+import { z } from "zod";
+
+const OrderSchema = z.object({ id: z.string(), total: z.number() });
+type Order = z.infer<typeof OrderSchema>;
+
+// registration
+consumers: [
+  {
+    name: "orders",
+    queueUrl: "...",
+    deserializer: (message) => OrderSchema.parse(JSON.parse(message.Body ?? "{}")),
+  },
+];
+
+// handler receives the parsed, typed body — no JSON.parse boilerplate
+@SqsMessageHandler({ name: "orders" })
+public async handle(order: Order) {
+  await this.process(order);
+}
+```
+
+If the payload is invalid, `.parse` throws — the message is **not acknowledged**,
+so it is redelivered and eventually dead-lettered, and the error surfaces on the
+`processing_error` event (see [Catch-all event handler](#catch-all-event-handler)).
+For batch handlers the deserializer is applied per message, so the handler
+receives an array of parsed values. To validate on the producing side too, parse
+before sending: `sqs.send("orders", { id, body: OrderSchema.parse(order) })`.
+
+#### End-to-end inference with `defineQueue`
+
+`defineQueue` binds a `name` to a `schema` **once**, so the same schema drives the
+deserializer, the handler's payload type, and the producer's body type — no
+repeated names, no hand-written `z.infer`:
+
+```ts
+import { defineQueue, Payload } from "@ssut/nestjs-sqs";
+
+const OrdersQueue = defineQueue({ name: "orders", schema: OrderSchema });
+
+// registration — deserializer wired from the schema automatically
+SqsModule.register({
+  consumers: [OrdersQueue.consumer({ queueUrl })],
+  producers: [OrdersQueue.producer({ queueUrl })],
+});
+
+// handler — payload type derived from the queue
+@SqsMessageHandler({ name: OrdersQueue.name })
+public async handle(order: Payload<typeof OrdersQueue>) {}
+
+// producing — the body is type-checked against the schema
+await this.sqs.send(OrdersQueue, { id: order.id, body: order });
+```
+
+`defineQueue` is schema-agnostic — it accepts anything with a `parse(input) => T`
+method (a Zod schema satisfies this structurally), so the library takes no
+dependency on Zod. Bodies are `JSON.parse`-d before validation; pass `decode` to
+change the wire format.
 
 ## Operational concerns
 
