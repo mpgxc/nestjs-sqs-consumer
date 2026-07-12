@@ -1,5 +1,33 @@
 # Changelog
 
+## 4.0.0-alpha.2 — Dependency upgrades (unreleased)
+
+Phase 2 (part 1): bump the runtime queue libraries to their current majors.
+
+### Changed
+
+- **`sqs-consumer` 11 → 15** and **`sqs-producer` 5 → 9**. Both now require
+  `@aws-sdk/client-sqs ^3.1036.0`, so the peer floor was raised to match — this
+  is what resolves the `setCredentialFeature is not a function` crash (#101) on
+  recent AWS SDK builds.
+- **`@golevelup/nestjs-discovery` 4 → 7** (requires `@nestjs ^11.1.21`; dev deps
+  bumped to 11.1.28 accordingly).
+
+### Acknowledgement semantics (#99 / #103)
+
+`sqs-consumer` v15 changed the handler contract: returning `undefined` **no
+longer acknowledges** a message (it is redelivered), and a message is only
+deleted when the handler returns it.
+
+To keep the pre-v4 developer experience — a `void` handler that finishes
+without throwing marks the message as processed — the module now sets
+**`alwaysAcknowledge: true` by default** on every consumer. This fixes the
+"successful messages keep getting requeued" report (#99).
+
+Opting out is per-consumer: pass `alwaysAcknowledge: false` and return the
+message (or an object with its `MessageId`) from your handler to control
+acknowledgement yourself, matching sqs-consumer's native contract (#103).
+
 ## 4.0.0-alpha.1 — Bug fixes (unreleased)
 
 Phase 1 of the v4 evolution: low-risk correctness fixes, each covered by a test.
