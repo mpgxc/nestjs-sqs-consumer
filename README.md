@@ -105,6 +105,20 @@ export class AppMessageHandler {
 }
 ```
 
+#### Catch-all event handler
+
+Use the `ALL_CONSUMERS` wildcard as the name to handle an event for **every**
+consumer with a single method — useful for centralized error reporting:
+
+```ts
+import { ALL_CONSUMERS, SqsConsumerEventHandler } from "@ssut/nestjs-sqs";
+
+@SqsConsumerEventHandler(ALL_CONSUMERS, "processing_error")
+public onAnyProcessingError(error: Error, message: Message) {
+  // fires for processing failures on any queue
+}
+```
+
 ### Produce messages
 
 ```ts

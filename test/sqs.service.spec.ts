@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD } from '../lib/sqs.constants';
+import { ALL_CONSUMERS, SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD } from '../lib/sqs.constants';
 import type { Message, SqsOptions } from '../lib/sqs.types';
 
 // --- Mock the underlying bbc libraries so no network/broker is involved. ---
@@ -59,10 +59,24 @@ const { SqsService } = await import('../lib/sqs.service');
 type DiscoveredMethod = {
   meta: Record<string, unknown>;
   discoveredMethod: {
+    methodName: string;
     handler: (...args: unknown[]) => unknown;
-    parentClass: { instance: unknown };
+    parentClass: { instance: Record<string, unknown> };
   };
 };
+
+// Build a discovered method the way @golevelup/nestjs-discovery exposes it: the
+// handler lives on the provider instance under `methodName` and is resolved
+// there at call time, so replacing it later (late wrapping) is honored.
+function discovered(
+  meta: Record<string, unknown>,
+  handler: (...args: unknown[]) => unknown,
+  instance: Record<string, unknown> = {},
+  methodName = 'handle',
+): DiscoveredMethod {
+  instance[methodName] = handler;
+  return { meta, discoveredMethod: { methodName, handler, parentClass: { instance } } };
+}
 
 function makeDiscover(messageHandlers: DiscoveredMethod[], eventHandlers: DiscoveredMethod[]) {
   return {
@@ -84,13 +98,8 @@ beforeEach(() => {
 });
 
 describe('SqsService — consumer/producer wiring', () => {
-  it('registers a consumer with the discovered message handler and starts it', async () => {
-    const handler = vi.fn();
-    const instance = {};
-    const discover = makeDiscover(
-      [{ meta: { name: 'queue-a' }, discoveredMethod: { handler, parentClass: { instance } } }],
-      [],
-    );
+  it('registers a consumer and starts it only on application bootstrap (#108)', async () => {
+    const discover = makeDiscover([discovered({ name: 'queue-a' }, vi.fn())], []);
 
     const service = buildService({ consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never] }, discover);
     await service.onModuleInit();
@@ -99,14 +108,34 @@ describe('SqsService — consumer/producer wiring', () => {
     expect(consumerInstances).toHaveLength(1);
     expect(consumerInstances[0].options.handleMessage).toBeTypeOf('function');
     expect(consumerInstances[0].options.handleMessageBatch).toBeUndefined();
+    // Polling must NOT start during init — only once the app is bootstrapped.
+    expect(consumerInstances[0].start).not.toHaveBeenCalled();
+
+    service.onApplicationBootstrap();
     expect(consumerInstances[0].start).toHaveBeenCalledOnce();
   });
 
+  it('resolves the handler at call time so late method wrapping is honored (#108)', async () => {
+    const calls: string[] = [];
+    const instance: Record<string, unknown> = {
+      handle: () => calls.push('original'),
+    };
+    const discover = makeDiscover([discovered({ name: 'queue-a' }, instance.handle as () => void, instance)], []);
+
+    const service = buildService({ consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never] }, discover);
+    await service.onModuleInit();
+
+    // Simulate a bootstrap-time decorator replacing the method on the instance
+    // AFTER wiring but BEFORE the first message is handled.
+    instance.handle = () => calls.push('wrapped');
+    service.onApplicationBootstrap();
+
+    await (consumerInstances[0].options.handleMessage as (m: unknown) => unknown)({});
+    expect(calls).toEqual(['wrapped']);
+  });
+
   it('defaults alwaysAcknowledge to true so void handlers ack on success (#99)', async () => {
-    const discover = makeDiscover(
-      [{ meta: { name: 'queue-a' }, discoveredMethod: { handler: vi.fn(), parentClass: { instance: {} } } }],
-      [],
-    );
+    const discover = makeDiscover([discovered({ name: 'queue-a' }, vi.fn())], []);
 
     const service = buildService({ consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never] }, discover);
     await service.onModuleInit();
@@ -115,10 +144,7 @@ describe('SqsService — consumer/producer wiring', () => {
   });
 
   it('lets a consumer opt out of auto-ack with alwaysAcknowledge: false (#103)', async () => {
-    const discover = makeDiscover(
-      [{ meta: { name: 'queue-a' }, discoveredMethod: { handler: vi.fn(), parentClass: { instance: {} } } }],
-      [],
-    );
+    const discover = makeDiscover([discovered({ name: 'queue-a' }, vi.fn())], []);
 
     const service = buildService(
       { consumers: [{ name: 'queue-a', queueUrl: 'url-a', alwaysAcknowledge: false } as never] },
@@ -131,11 +157,7 @@ describe('SqsService — consumer/producer wiring', () => {
   });
 
   it('wires handleMessageBatch when the handler is declared as batch', async () => {
-    const handler = vi.fn();
-    const discover = makeDiscover(
-      [{ meta: { name: 'queue-a', batch: true }, discoveredMethod: { handler, parentClass: { instance: {} } } }],
-      [],
-    );
+    const discover = makeDiscover([discovered({ name: 'queue-a', batch: true }, vi.fn())], []);
 
     const service = buildService({ consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never] }, discover);
     await service.onModuleInit();
@@ -145,10 +167,7 @@ describe('SqsService — consumer/producer wiring', () => {
   });
 
   it('throws when two consumers share the same name', async () => {
-    const discover = makeDiscover(
-      [{ meta: { name: 'dup' }, discoveredMethod: { handler: vi.fn(), parentClass: { instance: {} } } }],
-      [],
-    );
+    const discover = makeDiscover([discovered({ name: 'dup' }, vi.fn())], []);
 
     const service = buildService(
       {
@@ -186,18 +205,8 @@ describe('SqsService — consumer/producer wiring', () => {
     };
 
     const discover = makeDiscover(
-      [
-        {
-          meta: { name: 'queue-a' },
-          discoveredMethod: { handler: vi.fn(), parentClass: { instance: messageInstance } },
-        },
-      ],
-      [
-        {
-          meta: { name: 'queue-a', eventName: 'processing_error' },
-          discoveredMethod: { handler: eventHandler, parentClass: { instance: eventInstance } },
-        },
-      ],
+      [discovered({ name: 'queue-a' }, vi.fn(), messageInstance)],
+      [discovered({ name: 'queue-a', eventName: 'processing_error' }, eventHandler, eventInstance)],
     );
 
     const service = buildService({ consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never] }, discover);
@@ -212,11 +221,35 @@ describe('SqsService — consumer/producer wiring', () => {
     expect(boundThis).toBe(eventInstance);
   });
 
-  it('stops each consumer with its resolved stop options on destroy', async () => {
+  it('attaches an ALL_CONSUMERS event handler to every consumer (#89)', async () => {
+    const seen: string[] = [];
+    const globalHandler = (payload: unknown) => seen.push(payload as string);
+
     const discover = makeDiscover(
-      [{ meta: { name: 'queue-a' }, discoveredMethod: { handler: vi.fn(), parentClass: { instance: {} } } }],
-      [],
+      [discovered({ name: 'queue-a' }, vi.fn()), discovered({ name: 'queue-b' }, vi.fn())],
+      [discovered({ name: ALL_CONSUMERS, eventName: 'processing_error' }, globalHandler)],
     );
+
+    const service = buildService(
+      {
+        consumers: [{ name: 'queue-a', queueUrl: 'url-a' } as never, { name: 'queue-b', queueUrl: 'url-b' } as never],
+      },
+      discover,
+    );
+    await service.onModuleInit();
+
+    // The catch-all handler must be wired on both consumers.
+    expect(consumerInstances).toHaveLength(2);
+    for (const consumer of consumerInstances) {
+      const registered = consumer.listeners.find((l) => l.event === 'processing_error');
+      expect(registered).toBeDefined();
+      registered?.handler(`from-${consumer.queueUrl}`);
+    }
+    expect(seen).toEqual(['from-url-a', 'from-url-b']);
+  });
+
+  it('stops each consumer with its resolved stop options on destroy', async () => {
+    const discover = makeDiscover([discovered({ name: 'queue-a' }, vi.fn())], []);
 
     const service = buildService(
       {
