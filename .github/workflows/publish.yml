@@ -39,10 +39,16 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
-      - name: Check lint
-        run: pnpm biome ci
+      - name: Typecheck
+        run: pnpm run typecheck
 
-      - name: Run Tests
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Unit Tests
+        run: pnpm run test
+
+      - name: E2E Tests
         run: pnpm run test:e2e
 
 
