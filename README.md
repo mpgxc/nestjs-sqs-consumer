@@ -19,6 +19,7 @@ v3) and adds a NestJS-native registration, discovery, and lifecycle layer on top
   - [Async registration](#async-registration)
 - [Consuming messages](#consuming-messages)
   - [Batch handling](#batch-handling)
+  - [Routing by message type](#routing-by-message-type)
   - [Consumer events](#consumer-events)
   - [Catch-all event handler](#catch-all-event-handler)
   - [Message acknowledgement](#message-acknowledgement)
@@ -158,6 +159,46 @@ consumers: [{ name: "orders", queueUrl: "...", batchSize: 10 }];
 @SqsMessageHandler({ name: "orders", batch: true })
 public async handleBatch(messages: Message[]) {}
 ```
+
+### Routing by message type
+
+When one queue carries several kinds of message, route each to its own method by
+a **discriminator**. Add `type` to the handlers and tell the consumer how to read
+the discriminator from a message (helpers `byBodyField` / `byMessageAttribute`,
+or any `(message) => string | undefined`):
+
+```ts
+import { byBodyField, SqsMessageHandler } from "@mpgxc/nestjs-sqs-consumer";
+
+// registration
+consumers: [
+  {
+    name: "address-analysis",
+    queueUrl: "...",
+    discriminator: byBodyField("status"), // routes on JSON body `.status`
+    // onUnmatched: "error" (default) → not acked → dead-lettered; "ignore" → warn + ack
+  },
+];
+
+// one method per type — each only sees its own messages
+@Injectable()
+export class AddressAnalysisConsumer {
+  @SqsMessageHandler({ name: "address-analysis", type: "approved" })
+  onApproved(message: Message) {}
+
+  @SqsMessageHandler({ name: "address-analysis", type: "rejected" })
+  onRejected(message: Message) {}
+
+  @SqsMessageHandler({ name: "address-analysis", type: "pending" })
+  onPending(message: Message) {}
+}
+```
+
+An untyped `@SqsMessageHandler({ name: "address-analysis" })` on the same queue
+acts as the **fallback** for messages that match no `type`. Routing composes with
+[deserializer](#strongly-typed-messages-eg-zod), so each method can receive a
+parsed, typed body. (Routing dispatches per message; the `batch` flag is ignored
+on routed handlers.)
 
 ### Consumer events
 

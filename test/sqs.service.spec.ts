@@ -468,3 +468,91 @@ describe('SqsService — queue admin', () => {
     );
   });
 });
+
+describe('SqsService — message routing by discriminator', () => {
+  const discriminator = (m: { Body?: string }) => JSON.parse(m.Body ?? '{}').status as string | undefined;
+
+  const routedService = (consumerOpts: Record<string, unknown>, handlers: DiscoveredMethod[], logger?: unknown) =>
+    buildService(
+      {
+        consumers: [{ name: 'analysis', queueUrl: 'url', ...consumerOpts } as never],
+        ...(logger ? { logger: logger as never } : {}),
+      },
+      makeDiscover(handlers, []),
+    );
+
+  it('routes each message to the handler matching its discriminator', async () => {
+    const seen: string[] = [];
+    const service = routedService({ discriminator }, [
+      discovered({ name: 'analysis', type: 'approved' }, () => seen.push('approved')),
+      discovered({ name: 'analysis', type: 'rejected' }, () => seen.push('rejected')),
+      discovered({ name: 'analysis', type: 'pending' }, () => seen.push('pending')),
+    ]);
+    await service.onModuleInit();
+
+    const handle = consumerInstances[0].options.handleMessage as (m: unknown) => unknown;
+    await handle({ Body: '{"status":"approved"}' });
+    await handle({ Body: '{"status":"pending"}' });
+
+    expect(seen).toEqual(['approved', 'pending']);
+    // Routing always dispatches per message, never as a batch handler.
+    expect(consumerInstances[0].options.handleMessageBatch).toBeUndefined();
+  });
+
+  it('uses the untyped handler as fallback when no type matches', async () => {
+    const seen: string[] = [];
+    const service = routedService({ discriminator }, [
+      discovered({ name: 'analysis', type: 'approved' }, () => seen.push('approved')),
+      discovered({ name: 'analysis' }, () => seen.push('fallback')),
+    ]);
+    await service.onModuleInit();
+
+    await (consumerInstances[0].options.handleMessage as (m: unknown) => unknown)({ Body: '{"status":"unknown"}' });
+    expect(seen).toEqual(['fallback']);
+  });
+
+  it('throws on an unmatched type by default (message not acknowledged)', async () => {
+    const service = routedService({ discriminator }, [discovered({ name: 'analysis', type: 'approved' }, vi.fn())]);
+    await service.onModuleInit();
+
+    const handle = consumerInstances[0].options.handleMessage as (m: unknown) => unknown;
+    expect(() => handle({ Body: '{"status":"weird"}' })).toThrow(
+      'No @SqsMessageHandler for message type "weird" on consumer "analysis"',
+    );
+  });
+
+  it('ignores and warns on an unmatched type when onUnmatched is "ignore"', async () => {
+    const warn = vi.fn();
+    const service = routedService(
+      { discriminator, onUnmatched: 'ignore' },
+      [discovered({ name: 'analysis', type: 'approved' }, vi.fn())],
+      { warn },
+    );
+    await service.onModuleInit();
+
+    const handle = consumerInstances[0].options.handleMessage as (m: unknown) => unknown;
+    expect(handle({ Body: '{"status":"weird"}' })).toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('throws at init when typed handlers exist but no discriminator is configured', async () => {
+    const service = routedService({}, [discovered({ name: 'analysis', type: 'approved' }, vi.fn())]);
+    await expect(service.onModuleInit()).rejects.toThrow('no "discriminator" was configured');
+  });
+
+  it('passes the deserialized body to the routed handler', async () => {
+    let received: unknown;
+    const deserializer = (m: { Body?: string }) => JSON.parse(m.Body ?? '{}');
+    const service = routedService({ discriminator, deserializer }, [
+      discovered({ name: 'analysis', type: 'approved' }, (v: unknown) => {
+        received = v;
+      }),
+    ]);
+    await service.onModuleInit();
+
+    await (consumerInstances[0].options.handleMessage as (m: unknown) => unknown)({
+      Body: '{"status":"approved","id":1}',
+    });
+    expect(received).toEqual({ status: 'approved', id: 1 });
+  });
+});
