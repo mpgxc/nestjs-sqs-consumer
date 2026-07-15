@@ -45,19 +45,36 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
       await this.discover.providerMethodsWithMetaAtKey<SqsConsumerEventHandlerMeta>(SQS_CONSUMER_EVENT_HANDLER);
 
     this.options.consumers?.forEach((options) => {
-      const { name, stopOptions, deserializer, ...consumerOptions } = options;
+      const { name, stopOptions, deserializer, discriminator, onUnmatched, ...consumerOptions } = options;
       if (this.consumers.has(name)) {
         throw new Error(`Consumer already exists: ${name}`);
       }
 
-      const metadata = messageHandlers.find(({ meta }) => meta.name === name);
-      if (!metadata) {
+      const handlers = messageHandlers.filter(({ meta }) => meta.name === name);
+      if (handlers.length === 0) {
         this.logger.warn(`No metadata found for: ${name}`);
         return;
       }
 
-      const isBatchHandler = metadata.meta.batch === true;
-      const handler = this.withDeserializer(this.lateBound(metadata.discoveredMethod), deserializer, isBatchHandler);
+      const routed = handlers.filter(({ meta }) => meta.type !== undefined);
+      // biome-ignore lint/suspicious/noExplicitAny: matches sqs-consumer's loose handler contract.
+      let handleMessage: ((...args: any[]) => any) | undefined;
+      // biome-ignore lint/suspicious/noExplicitAny: matches sqs-consumer's loose handler contract.
+      let handleMessageBatch: ((...args: any[]) => any) | undefined;
+
+      if (routed.length > 0) {
+        handleMessage = this.buildRouter(name, handlers, { discriminator, deserializer, onUnmatched });
+      } else {
+        const metadata = handlers[0];
+        const isBatchHandler = metadata.meta.batch === true;
+        const handler = this.withDeserializer(this.lateBound(metadata.discoveredMethod), deserializer, isBatchHandler);
+        if (isBatchHandler) {
+          handleMessageBatch = handler;
+        } else {
+          handleMessage = handler;
+        }
+      }
+
       const consumer = Consumer.create({
         // Default to acknowledging a message once its handler resolves without
         // throwing, preserving the pre-v4 nestjs-sqs behavior. Since sqs-consumer
@@ -65,7 +82,7 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
         // per-consumer `alwaysAcknowledge: false` (return the message to ack).
         alwaysAcknowledge: true,
         ...consumerOptions,
-        ...(isBatchHandler ? { handleMessageBatch: handler } : { handleMessage: handler }),
+        ...(handleMessageBatch ? { handleMessageBatch } : { handleMessage }),
       });
 
       // A handler registered for this queue's name, plus any catch-all handler
@@ -148,6 +165,53 @@ export class SqsService implements OnModuleInit, OnApplicationBootstrap, OnModul
     return isBatch
       ? (messages: SqsRawMessage[]) => invoke(messages.map((message) => deserializer(message)))
       : (message: SqsRawMessage) => invoke(deserializer(message));
+  }
+
+  /**
+   * Build a per-message dispatcher for a queue that has typed
+   * `@SqsMessageHandler({ name, type })` handlers. Each message's discriminator
+   * selects the matching handler; an untyped handler on the same queue, if any,
+   * is the fallback. Unmatched messages follow `onUnmatched` ('error' by
+   * default → not acknowledged → dead-lettered).
+   */
+  private buildRouter(
+    name: QueueName,
+    handlers: Array<{
+      meta: SqsMessageHandlerMeta;
+      discoveredMethod: { methodName: string; parentClass: { instance: unknown } };
+    }>,
+    options: {
+      discriminator?: (message: SqsRawMessage) => string | undefined;
+      deserializer?: (message: SqsRawMessage) => unknown;
+      onUnmatched?: 'error' | 'ignore';
+    },
+  ): (message: SqsRawMessage) => unknown {
+    const { discriminator, deserializer, onUnmatched } = options;
+    if (!discriminator) {
+      throw new Error(`Consumer "${name}" has typed @SqsMessageHandler(s) but no "discriminator" was configured`);
+    }
+
+    const routes = new Map<string, (arg: unknown) => unknown>();
+    for (const handler of handlers) {
+      if (handler.meta.type !== undefined) {
+        routes.set(handler.meta.type, this.lateBound(handler.discoveredMethod));
+      }
+    }
+    const fallback = handlers.find(({ meta }) => meta.type === undefined);
+    const fallbackFn = fallback ? this.lateBound(fallback.discoveredMethod) : undefined;
+
+    return (message: SqsRawMessage) => {
+      const key = discriminator(message);
+      const target = (key !== undefined ? routes.get(key) : undefined) ?? fallbackFn;
+      if (!target) {
+        if (onUnmatched === 'ignore') {
+          this.logger.warn(`No @SqsMessageHandler for type "${key}" on consumer "${name}"; ignoring message`);
+          return undefined;
+        }
+        throw new Error(`No @SqsMessageHandler for message type "${key}" on consumer "${name}"`);
+      }
+      return target(deserializer ? deserializer(message) : message);
+    };
   }
 
   private knownNames(map: Map<QueueName, unknown>): string {

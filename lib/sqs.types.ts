@@ -18,6 +18,19 @@ export type SqsConsumerOptions = Omit<ConsumerOptions, 'handleMessage' | 'handle
    * redelivered / dead-lettered.
    */
   deserializer?: (message: SqsRawMessage) => unknown;
+  /**
+   * Extracts a discriminator value from each message so it can be routed to the
+   * `@SqsMessageHandler({ name, type })` whose `type` matches. Required when the
+   * queue has any typed handlers. See `byBodyField` / `byMessageAttribute`.
+   */
+  discriminator?: (message: SqsRawMessage) => string | undefined;
+  /**
+   * What to do with a message whose discriminator matches no typed handler (and
+   * there is no untyped fallback handler). `'error'` (default) throws, so the
+   * message is not acknowledged and is redelivered / dead-lettered; `'ignore'`
+   * logs a warning and acknowledges it.
+   */
+  onUnmatched?: 'error' | 'ignore';
 };
 
 export type SqsConsumerMapValues = {
@@ -65,6 +78,12 @@ export interface Message<T = any> {
 export interface SqsMessageHandlerMeta {
   name: string;
   batch?: boolean;
+  /**
+   * Routes only messages whose discriminator (see `SqsConsumerOptions.discriminator`)
+   * equals this value to the decorated method. Omit for a single whole-queue
+   * handler, or for the fallback handler when other handlers on the queue are typed.
+   */
+  type?: string;
 }
 
 export interface SqsConsumerEventHandlerMeta {

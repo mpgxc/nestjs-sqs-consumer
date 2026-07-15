@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.0.0-alpha.6 — Message routing (unreleased)
+
+### Added
+
+- **Route one queue to per-type handlers.** Add `type` to
+  `@SqsMessageHandler({ name, type })` and a `discriminator` to the consumer;
+  each message is dispatched to the handler whose `type` matches. An untyped
+  handler on the same queue is the fallback.
+
+  ```ts
+  consumers: [{ name: "address-analysis", queueUrl: "...", discriminator: byBodyField("status") }];
+
+  @SqsMessageHandler({ name: "address-analysis", type: "approved" }) onApproved(m) {}
+  @SqsMessageHandler({ name: "address-analysis", type: "rejected" }) onRejected(m) {}
+  @SqsMessageHandler({ name: "address-analysis", type: "pending" }) onPending(m) {}
+  ```
+
+  Exports the `byBodyField` / `byMessageAttribute` discriminator helpers (and the
+  `Discriminator` type). `onUnmatched` controls unmatched messages — `'error'`
+  (default) does not acknowledge them (redelivered / dead-lettered), `'ignore'`
+  warns and acknowledges. Composes with `deserializer`, so each method can
+  receive a parsed, typed value.
+
 ## 4.0.0-alpha.5 — Typed messages (unreleased)
 
 ### Added
